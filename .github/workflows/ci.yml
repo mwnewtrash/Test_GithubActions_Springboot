@@ -83,6 +83,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.dependency-check-data
+          save-always: true
           key: dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             dependency-check-${{ runner.os }}-
