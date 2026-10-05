@@ -1,4 +1,4 @@
-/target/
+﻿/target/
 !.mvn/wrapper/maven-wrapper.jar
 
 ### STS ###
@@ -25,6 +25,6 @@
 /.nb-gradle/
 
 .DS_Store
-.mvn/
+# Maven Wrapper configuration is tracked with the project
 derby.log
 mvnenv.sh
