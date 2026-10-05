@@ -2,9 +2,9 @@
 
 on:
   push:
-    branches: ["master", "Devsecops-Pipeline"]
+    branches: ["main", "Devsecops-Pipeline"]
   pull_request:
-    branches: ["master"]
+    branches: ["main"]
 
 permissions:
   contents: read
@@ -62,3 +62,4 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:java"
+
