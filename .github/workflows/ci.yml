@@ -81,4 +81,17 @@ jobs:
           cache: maven
 
       - name: Run OWASP Dependency Check
-        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=0
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=0 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+
+      - name: Upload Dependency Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+            target/dependency-check-report.xml
+          if-no-files-found: warn
