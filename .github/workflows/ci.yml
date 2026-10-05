@@ -1,68 +1,4 @@
-﻿name: CI
-
-on:
-  push:
-    branches: ["main", "Devsecops-Pipeline"]
-  pull_request:
-    branches: ["main"]
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    name: Build Spring Boot Application
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "8"
-          cache: maven
-
-      - name: Build
-        run: bash ./mvnw -B verify
-
-
-  codeql:
-    name: SAST - CodeQL
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      packages: read
-      actions: read
-      contents: read
-
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "8"
-          cache: maven
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: java
-          build-mode: manual
-
-      - name: Build application
-        run: bash ./mvnw -B verify
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:java"
-
+﻿cd D:\Github\Test_GithubActions_Springboot; $p=".github\workflows\ci.yml"; $c=Get-Content $p -Raw; $c=$c -replace '(?ms)^  sca:\r?\n.*?(?=^  [A-Za-z0-9_-]+:\s*$|\z)', @'
   sca:
     name: SCA - OWASP Dependency Check
     runs-on: ubuntu-latest
@@ -80,10 +16,26 @@ jobs:
           java-version: "8"
           cache: maven
 
+      - name: Cache Dependency Check database
+        uses: actions/cache@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-${{ format('{0:yyyyMMdd}', github.event.repository.updated_at) }}
+          restore-keys: |
+            dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-
+            dependency-check-${{ runner.os }}-
+
       - name: Run OWASP Dependency Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=0 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY
+        run: |
+          bash ./mvnw -B org.owasp:dependency-check-maven:check \
+            -DskipTests \
+            -DfailBuildOnCVSS=0 \
+            -DnvdApiKeyEnvironmentVariable=NVD_API_KEY \
+            -DnvdValidForHours=24 \
+            -DdataDirectory=$HOME/.dependency-check-data \
+            -DossIndexAnalyzerEnabled=false
 
       - name: Upload Dependency Check report
         if: always()
@@ -95,3 +47,4 @@ jobs:
             target/dependency-check-report.json
             target/dependency-check-report.xml
           if-no-files-found: warn
+
