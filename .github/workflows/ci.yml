@@ -63,3 +63,22 @@ jobs:
         with:
           category: "/language:java"
 
+  sca:
+    name: SCA - OWASP Dependency Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - name: Run OWASP Dependency Check
+        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=0
