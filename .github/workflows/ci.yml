@@ -28,6 +28,18 @@ jobs:
       - name: Build
         run: bash ./mvnw -B verify
 
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    steps:
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
   codeql:
     name: SAST - CodeQL
     runs-on: ubuntu-latest
@@ -215,3 +227,4 @@ jobs:
           if [ -f /tmp/spring-boot.pid ]; then
             kill "$(cat /tmp/spring-boot.pid)" || true
           fi
+
