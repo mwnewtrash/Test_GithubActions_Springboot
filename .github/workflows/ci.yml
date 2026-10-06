@@ -144,3 +144,17 @@ jobs:
             target/dependency-check-report.json
             target/dependency-check-report.xml
           if-no-files-found: warn
+  secrets:
+    name: Secret Scanning - Gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
