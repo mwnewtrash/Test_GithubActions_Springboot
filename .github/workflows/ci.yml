@@ -103,59 +103,31 @@ jobs:
         shell: bash
         run: |
           python3 - <<'PY'
+          import json
           import sys
-          import xml.etree.ElementTree as ET
 
-          report = "target/dependency-check-report.xml"
+          report = "target/dependency-check-report.json"
 
-          try:
-              root = ET.parse(report).getroot()
-          except Exception as exc:
-              print(f"SECURITY GATE: ERROR - unable to parse {report}: {exc}")
-              sys.exit(1)
+          with open(report, encoding="utf-8") as f:
+              data = json.load(f)
 
-          critical = 0
-          high = 0
-          medium = 0
-          low = 0
-          total = 0
+          counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
 
-          for vuln in root.findall(".//vulnerability"):
-              scores = []
+          for dependency in data.get("dependencies", []):
+              for vulnerability in dependency.get("vulnerabilities", []):
+                  severity = vulnerability.get("severity", "").upper()
+                  if severity in counts:
+                      counts[severity] += 1
 
-              for element in vuln.iter():
-                  tag = element.tag.split("}")[-1].lower()
-
-                  if tag in ("basescore", "score"):
-                      try:
-                          value = float(element.text)
-                          if 0.0 <= value <= 10.0:
-                              scores.append(value)
-                      except (TypeError, ValueError):
-                          pass
-
-              if not scores:
-                  continue
-
-              total += 1
-              score = max(scores)
-
-              if score >= 9.0:
-                  critical += 1
-              elif score >= 7.0:
-                  high += 1
-              elif score >= 4.0:
-                  medium += 1
-              else:
-                  low += 1
+          total = sum(counts.values())
 
           print(f"Dependency-Check vulnerabilities evaluated: {total}")
-          print(f"Critical findings: {critical}")
-          print(f"High findings:     {high}")
-          print(f"Medium findings:   {medium}")
-          print(f"Low findings:      {low}")
+          print(f"Critical findings: {counts['CRITICAL']}")
+          print(f"High findings:     {counts['HIGH']}")
+          print(f"Medium findings:   {counts['MEDIUM']}")
+          print(f"Low findings:      {counts['LOW']}")
 
-          if critical > 0 or high > 0:
+          if counts["CRITICAL"] > 0 or counts["HIGH"] > 0:
               print("SECURITY GATE: FAILED")
               print("Critical or High severity vulnerabilities detected.")
               sys.exit(1)
