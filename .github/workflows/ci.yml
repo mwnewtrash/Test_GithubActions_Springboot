@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -27,7 +27,6 @@ jobs:
 
       - name: Build
         run: bash ./mvnw -B verify
-
 
   codeql:
     name: SAST - CodeQL
@@ -63,3 +62,156 @@ jobs:
         with:
           category: "/language:java"
 
+  sca:
+    name: SCA - OWASP Dependency Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - name: Restore Dependency Check database
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            dependency-check-${{ runner.os }}-
+
+      - name: Run OWASP Dependency Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=11 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY -DnvdValidForHours=24 -DdataDirectory=$HOME/.dependency-check-data -DossindexAnalyzerEnabled=false -Dformats=HTML,XML,JSON
+
+      - name: Save Dependency Check database
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.dependency-check-data
+          key: dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+      - name: Security Gate - Critical and High vulnerabilities
+        if: success()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import sys
+
+          report = "target/dependency-check-report.json"
+
+          with open(report, encoding="utf-8") as f:
+              data = json.load(f)
+
+          counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+
+          for dependency in data.get("dependencies", []):
+              for vulnerability in dependency.get("vulnerabilities", []):
+                  severity = vulnerability.get("severity", "").upper()
+                  if severity in counts:
+                      counts[severity] += 1
+
+          total = sum(counts.values())
+
+          print(f"Dependency-Check vulnerabilities evaluated: {total}")
+          print(f"Critical findings: {counts['CRITICAL']}")
+          print(f"High findings:     {counts['HIGH']}")
+          print(f"Medium findings:   {counts['MEDIUM']}")
+          print(f"Low findings:      {counts['LOW']}")
+
+          if counts["CRITICAL"] > 0 or counts["HIGH"] > 0:
+              print("SECURITY GATE: FAILED")
+              print("Critical or High severity vulnerabilities detected.")
+              sys.exit(1)
+
+          print("SECURITY GATE: PASSED")
+          PY
+      - name: Upload Dependency Check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+            target/dependency-check-report.xml
+          if-no-files-found: warn
+  secrets:
+    name: Secret Scanning - Gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  dast:
+    name: DAST - OWASP ZAP
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - name: Build application
+        run: bash ./mvnw -B package -DskipTests
+
+      - name: Start application
+        run: |
+          nohup bash ./mvnw -B spring-boot:run > /tmp/spring-boot.log 2>&1 &
+          echo $! > /tmp/spring-boot.pid
+
+      - name: Wait for application
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null 2>&1; then
+              echo "Application is ready."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Application failed to start."
+          cat /tmp/spring-boot.log
+          exit 1
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: http://127.0.0.1:8080
+          fail_action: false
+          allow_issue_writing: true
+          issue_title: "DAST - OWASP ZAP Findings"
+
+      - name: Show application log on failure
+        if: failure()
+        run: cat /tmp/spring-boot.log
+
+      - name: Stop application
+        if: always()
+        run: |
+          if [ -f /tmp/spring-boot.pid ]; then
+            kill "$(cat /tmp/spring-boot.pid)" || true
+          fi
