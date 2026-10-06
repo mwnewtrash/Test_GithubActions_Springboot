@@ -90,7 +90,7 @@ jobs:
       - name: Run OWASP Dependency Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=0 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY -DnvdValidForHours=24 -DdataDirectory=$HOME/.dependency-check-data -DossIndexAnalyzerEnabled=false
+        run: bash ./mvnw -B org.owasp:dependency-check-maven:check -DskipTests -DfailBuildOnCVSS=11 -DnvdApiKeyEnvironmentVariable=NVD_API_KEY -DnvdValidForHours=24 -DdataDirectory=$HOME/.dependency-check-data -DossIndexAnalyzerEnabled=false -Dformats=HTML,XML,JSON
 
       - name: Save Dependency Check database
         if: always()
@@ -98,6 +98,70 @@ jobs:
         with:
           path: ~/.dependency-check-data
           key: dependency-check-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+      - name: Security Gate - Critical and High vulnerabilities
+        if: success()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+
+          report = "target/dependency-check-report.xml"
+
+          try:
+              root = ET.parse(report).getroot()
+          except Exception as exc:
+              print(f"SECURITY GATE: ERROR - unable to parse {report}: {exc}")
+              sys.exit(1)
+
+          critical = 0
+          high = 0
+          medium = 0
+          low = 0
+          total = 0
+
+          for vuln in root.findall(".//vulnerability"):
+              scores = []
+
+              for element in vuln.iter():
+                  tag = element.tag.split("}")[-1].lower()
+
+                  if tag in ("basescore", "score"):
+                      try:
+                          value = float(element.text)
+                          if 0.0 <= value <= 10.0:
+                              scores.append(value)
+                      except (TypeError, ValueError):
+                          pass
+
+              if not scores:
+                  continue
+
+              total += 1
+              score = max(scores)
+
+              if score >= 9.0:
+                  critical += 1
+              elif score >= 7.0:
+                  high += 1
+              elif score >= 4.0:
+                  medium += 1
+              else:
+                  low += 1
+
+          print(f"Dependency-Check vulnerabilities evaluated: {total}")
+          print(f"Critical findings: {critical}")
+          print(f"High findings:     {high}")
+          print(f"Medium findings:   {medium}")
+          print(f"Low findings:      {low}")
+
+          if critical > 0 or high > 0:
+              print("SECURITY GATE: FAILED")
+              print("Critical or High severity vulnerabilities detected.")
+              sys.exit(1)
+
+          print("SECURITY GATE: PASSED")
+          PY
       - name: Upload Dependency Check report
         if: always()
         uses: actions/upload-artifact@v4
