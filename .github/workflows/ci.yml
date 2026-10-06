@@ -276,12 +276,21 @@ jobs:
         id: push
         run: docker push mwnewtrash/dockerhub_test_githubactions_springboot:${{ github.sha }}
 
+      - name: Get pushed image digest
+        id: digest
+        shell: bash
+        run: |
+          DIGEST="$(docker image inspect --format='{{index .RepoDigests 0}}' mwnewtrash/dockerhub_test_githubactions_springboot:${{ github.sha }})"
+          echo "digest=${DIGEST#*@}" >> "$GITHUB_OUTPUT"
+
       - name: Attest container image
         uses: actions/attest-build-provenance@v3
         with:
           subject-name: index.docker.io/mwnewtrash/dockerhub_test_githubactions_springboot
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true  container-security:
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  container-security:
     name: Container Security - Trivy
     runs-on: ubuntu-latest
     permissions:
