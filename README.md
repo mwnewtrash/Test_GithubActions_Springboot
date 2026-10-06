@@ -45,3 +45,6 @@ CONTRAST_MAVEN_SERVICEKEY
 ## Details
 
 The application runs using an in-memory H2 database. Schema and sample data should load on boot.
+
+## DevSecOps Pipeline
+Security controls: CodeQL, OWASP Dependency Check, Gitleaks, and OWASP ZAP.
