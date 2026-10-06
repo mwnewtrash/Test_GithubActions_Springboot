@@ -228,3 +228,29 @@ jobs:
             kill "$(cat /tmp/spring-boot.pid)" || true
           fi
 
+
+  container-build:
+    name: Container Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - name: Build application
+        run: bash ./mvnw -B package -DskipTests
+
+      - name: Build container image
+        run: docker build -t test-githubactions-springboot:${{ github.sha }} .
+
+      - name: Verify container image
+        run: docker image inspect test-githubactions-springboot:${{ github.sha }}
