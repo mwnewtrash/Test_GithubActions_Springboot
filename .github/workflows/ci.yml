@@ -339,6 +339,15 @@ jobs:
           framework: dockerfile,github_actions
           quiet: false
           soft_fail: true
+
+      - name: Scan Kubernetes manifests with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: k8s/
+          format: table
+          severity: CRITICAL,HIGH,MEDIUM
+          exit-code: "0"
   sbom:
     name: SBOM - CycloneDX
     runs-on: ubuntu-latest
@@ -483,6 +492,8 @@ jobs:
             echo "BLOCK: Build provenance failed"
             failed=1
           fi
+
+          echo "Kubernetes security scan: ${{ needs.iac-security.result }}"
 
           echo
           if [ "$failed" -ne 0 ]; then
