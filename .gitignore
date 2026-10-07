@@ -28,3 +28,11 @@
 # Maven Wrapper configuration is tracked with the project
 derby.log
 mvnenv.sh
+
+# Security analysis artifacts
+dependency-tree.txt
+sca-report/
+pom.xml.pre-sca-remediation
+.github/container-build-job.tmp
+t_GithubActions_Springboot
+
