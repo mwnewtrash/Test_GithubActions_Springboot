@@ -192,7 +192,7 @@ jobs:
 
       - name: Start application
         run: |
-          nohup bash ./mvnw -B spring-boot:run > /tmp/spring-boot.log 2>&1 &
+          nohup java -jar target/*.jar > /tmp/spring-boot.log 2>&1 &
           echo $! > /tmp/spring-boot.pid
 
       - name: Wait for application
