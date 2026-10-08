@@ -36,3 +36,9 @@ pom.xml.pre-sca-remediation
 .github/container-build-job.tmp
 t_GithubActions_Springboot
 
+
+# Terraform generated files
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+

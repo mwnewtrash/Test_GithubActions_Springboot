@@ -412,6 +412,40 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
 
+  terraform:
+    name: Terraform - Validate and Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: terraform/floci/aws
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+      - name: Terraform Init
+        run: terraform init -input=false
+      - name: Terraform Validate
+        run: terraform validate
+      - name: Terraform Plan
+        run: terraform plan -input=false -refresh=false -out=tfplan
+      - name: Terraform Security Scan - Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform
+          framework: terraform
+          quiet: false
+          soft_fail: true
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform/floci/aws/tfplan
+          if-no-files-found: warn
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
@@ -427,6 +461,7 @@ jobs:
       - iac-security
       - sbom
       - provenance
+      - terraform
     if: always()
     permissions:
       contents: read
@@ -450,6 +485,7 @@ jobs:
           echo "IaC Security:       ${{ needs.iac-security.result }}"
           echo "SBOM:               ${{ needs.sbom.result }}"
           echo "Provenance:         ${{ needs.provenance.result }}"
+          echo "Terraform:          ${{ needs.terraform.result }}"
           echo
           echo "=========================================="
           echo "            SECURITY POLICY"
@@ -493,6 +529,10 @@ jobs:
             failed=1
           fi
 
+          if [ "${{ needs.terraform.result }}" != "success" ]; then
+            echo "BLOCK: Terraform validation/security checks failed"
+            failed=1
+          fi
           echo "Kubernetes security scan: ${{ needs.iac-security.result }}"
 
           echo
@@ -506,4 +546,3 @@ jobs:
           echo "=========================================="
           echo "SECURITY GATE: PASSED"
           echo "=========================================="
-
