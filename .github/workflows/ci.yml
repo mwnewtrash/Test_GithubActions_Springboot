@@ -547,3 +547,33 @@ jobs:
           echo "SECURITY GATE: PASSED"
           echo "=========================================="
 
+  deploy-floci-eks:
+    name: Deploy to Floci EKS (Test)
+    runs-on: [self-hosted, Windows, X64]
+    needs: container-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/Devsecops-Pipeline'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Verify Floci EKS access
+        shell: powershell
+        run: |
+          kubectl --context floci-eks get nodes
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot access Floci EKS context.' }
+
+      - name: Deploy published commit image
+        shell: powershell
+        run: |
+          $image = "mwnewtrash/dockerhub_test_githubactions_springboot:${{ github.sha }}"
+          $manifest = "k8s/deployment.yaml"
+          $content = Get-Content $manifest -Raw
+          $content = $content.Replace('image: vulnerable-springboot:local', "image: $image")
+          $content = $content.Replace('imagePullPolicy: Never', 'imagePullPolicy: Always')
+          Set-Content -Path $manifest -Value $content -Encoding utf8
+          kubectl --context floci-eks apply -f $manifest
+          if ($LASTEXITCODE -ne 0) { throw 'Kubernetes apply failed.' }
+          kubectl --context floci-eks rollout status deployment/vulnerable-springboot -n devsecops --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw 'Deployment rollout failed.' }
