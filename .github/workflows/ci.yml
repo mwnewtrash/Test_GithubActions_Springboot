@@ -560,7 +560,7 @@ jobs:
       - name: Build application JAR
         shell: powershell
         run: |
-          .\mvnw.cmd -B package -Dmaven.test.skip=true
+          .\mvnw.cmd -B package "-Dmaven.test.skip=true"
           if ($LASTEXITCODE -ne 0) { throw "Maven build failed." }
           if (-not (Get-ChildItem .\target\*.jar -ErrorAction SilentlyContinue)) { throw "No application JAR found in target." }
 
