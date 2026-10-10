@@ -557,6 +557,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build application JAR
+        shell: powershell
+        run: |
+          .\mvnw.cmd -B package -Dmaven.test.skip=true
+          if ($LASTEXITCODE -ne 0) { throw "Maven build failed." }
+          if (-not (Get-ChildItem .\target\*.jar -ErrorAction SilentlyContinue)) { throw "No application JAR found in target." }
+
       - name: Build image for Floci
         shell: powershell
         run: |
