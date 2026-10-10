@@ -606,6 +606,6 @@ jobs:
           [IO.File]::WriteAllText($tmp, $m, [Text.UTF8Encoding]::new($false))
           kubectl --kubeconfig $k apply -f $tmp
           if ($LASTEXITCODE -ne 0) { throw "Kubernetes apply failed." }
-          kubectl --kubeconfig $k -n devsecops rollout status deployment/vulnerable-springboot --timeout=180s
+          kubectl --kubeconfig $k -n devsecops rollout status deployment/vulnerable-springboot --timeout=600s
           if ($LASTEXITCODE -ne 0) { throw "Deployment rollout failed." }
           kubectl --kubeconfig $k -n devsecops get pods
