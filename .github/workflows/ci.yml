@@ -550,8 +550,8 @@ jobs:
   deploy-floci-eks:
     name: Deploy to Floci EKS
     runs-on: [self-hosted, Windows, X64]
-    needs: security-gate
-    if: github.event_name == 'push' && github.ref == 'refs/heads/Devsecops-Pipeline'
+    needs: [security-gate, container-build]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/Devsecops-Pipeline' && needs.container-build.result == 'success'
     permissions:
       contents: read
     steps:
