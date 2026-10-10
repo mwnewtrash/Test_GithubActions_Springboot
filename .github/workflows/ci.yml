@@ -548,32 +548,56 @@ jobs:
           echo "=========================================="
 
   deploy-floci-eks:
-    name: Deploy to Floci EKS (Test)
+    name: Deploy to Floci EKS
     runs-on: [self-hosted, Windows, X64]
-    needs: container-build
+    needs: security-gate
     if: github.event_name == 'push' && github.ref == 'refs/heads/Devsecops-Pipeline'
     permissions:
       contents: read
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Verify Floci EKS access
+      - name: Login to Docker Hub
+        shell: powershell
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          $env:DOCKERHUB_TOKEN | docker login -u $env:DOCKERHUB_USERNAME --password-stdin
+          if ($LASTEXITCODE -ne 0) { throw "Docker Hub login failed." }
+
+      - name: Push image to Floci registry
         shell: powershell
         run: |
-          kubectl --context floci-eks get nodes
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot access Floci EKS context.' }
+          $sha = "${{ github.sha }}"
+          $src = "mwnewtrash/dockerhub_test_githubactions_springboot:$sha"
+          $dst = "127.0.0.1:5100/devsecops/vulnerable-springboot:$sha"
+          docker pull $src
+          if ($LASTEXITCODE -ne 0) { throw "Image pull failed." }
+          docker tag $src $dst
+          if ($LASTEXITCODE -ne 0) { throw "Image tag failed." }
+          docker push $dst
+          if ($LASTEXITCODE -ne 0) { throw "Registry push failed." }
 
-      - name: Deploy published commit image
+      - name: Deploy to Floci EKS
         shell: powershell
         run: |
-          $image = "mwnewtrash/dockerhub_test_githubactions_springboot:${{ github.sha }}"
-          $manifest = "k8s/deployment.yaml"
-          $content = Get-Content $manifest -Raw
-          $content = $content.Replace('image: vulnerable-springboot:local', "image: $image")
-          $content = $content.Replace('imagePullPolicy: Never', 'imagePullPolicy: Always')
-          Set-Content -Path $manifest -Value $content -Encoding utf8
-          kubectl --context floci-eks apply -f $manifest
-          if ($LASTEXITCODE -ne 0) { throw 'Kubernetes apply failed.' }
-          kubectl --context floci-eks rollout status deployment/vulnerable-springboot -n devsecops --timeout=180s
-          if ($LASTEXITCODE -ne 0) { throw 'Deployment rollout failed.' }
+          $k = Join-Path $env:TEMP "floci-eks-lab.yaml"
+          if (!(Test-Path $k)) { throw "Kubeconfig not found: $k" }
+          kubectl --kubeconfig $k get nodes
+          if ($LASTEXITCODE -ne 0) { throw "Cluster access failed." }
+
+          $sha = "${{ github.sha }}"
+          $img = "floci-ecr-registry:5000/devsecops/vulnerable-springboot:$sha"
+          $m = Get-Content "k8s/deployment.yaml" -Raw
+          $old = "image: floci-ecr-registry:5000/devsecops/vulnerable-springboot:local"
+          if (!$m.Contains($old)) { throw "Expected manifest image not found." }
+          $m = $m.Replace($old, "image: $img")
+
+          $tmp = Join-Path $env:TEMP "floci-deployment.yaml"
+          [IO.File]::WriteAllText($tmp, $m, [Text.UTF8Encoding]::new($false))
+          kubectl --kubeconfig $k apply -f $tmp
+          if ($LASTEXITCODE -ne 0) { throw "Kubernetes apply failed." }
+          kubectl --kubeconfig $k -n devsecops rollout status deployment/vulnerable-springboot --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw "Deployment rollout failed." }
+          kubectl --kubeconfig $k -n devsecops get pods
