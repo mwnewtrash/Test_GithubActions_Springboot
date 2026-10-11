@@ -653,7 +653,7 @@ jobs:
           $sha = "${{ github.sha }}"
           $img = "000000000000.dkr.ecr.us-east-1.localhost:4566/devsecops/vulnerable-springboot:$sha"
           $m = Get-Content "k8s/deployment.yaml" -Raw
-          $old = "image: floci-ecr-registry:5000/devsecops/vulnerable-springboot:local"
+          $old = "image: 000000000000.dkr.ecr.us-east-1.localhost:4566/devsecops/vulnerable-springboot:local"
           if (!$m.Contains($old)) { throw "Expected manifest image not found." }
           $m = $m.Replace($old, "image: $img")
 
