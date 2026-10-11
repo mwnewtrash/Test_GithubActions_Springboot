@@ -590,6 +590,25 @@ jobs:
       - name: Deploy to Floci EKS
         shell: powershell
         run: |
+          # Ensure registry DNS network before deploying.
+          $network = "floci-registry-net"
+          $containers = @("floci-aws-eks-devsecops-eks-lab", "floci-ecr-registry")
+          $networks = docker network ls --format "{{.Name}}"
+          if ($LASTEXITCODE -ne 0) { throw "Could not list Docker networks." }
+          if ($networks -notcontains $network) {
+            docker network create $network | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not create registry network." }
+          }
+          foreach ($name in $containers) {
+            $raw = docker inspect $name 2>$null
+            if ($LASTEXITCODE -ne 0 -or !$raw) { throw "Required container not found: $name" }
+            $item = @($raw | ConvertFrom-Json)[0]
+            if ($item.State.Status -ne "running") { throw "Required container is not running: $name" }
+            if (@($item.NetworkSettings.Networks.PSObject.Properties.Name) -notcontains $network) {
+              docker network connect $network $name
+              if ($LASTEXITCODE -ne 0) { throw "Could not attach $name to $network." }
+            }
+          }
           $k = Join-Path $env:TEMP "floci-eks-lab.yaml"
           if (!(Test-Path $k)) { throw "Kubeconfig not found: $k" }
           kubectl --kubeconfig $k get nodes
