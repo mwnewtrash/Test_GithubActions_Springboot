@@ -31,7 +31,7 @@ spec:
           emptyDir: {}
       containers:
         - name: vulnerable-springboot
-          image: floci-ecr-registry:5000/devsecops/vulnerable-springboot:local
+          image: 000000000000.dkr.ecr.us-east-1.localhost:4566/devsecops/vulnerable-springboot:local
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

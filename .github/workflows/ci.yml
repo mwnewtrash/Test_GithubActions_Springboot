@@ -564,29 +564,46 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Maven build failed." }
           if (-not (Get-ChildItem .\target\*.jar -ErrorAction SilentlyContinue)) { throw "No application JAR found in target." }
 
-      - name: Build image for Floci
+      - name: Build image for Floci ECR
         shell: powershell
         run: |
           $sha = "${{ github.sha }}"
-          $src = "devsecops/vulnerable-springboot:$sha"
-          docker build -t $src .
-          if ($LASTEXITCODE -ne 0) { throw "Local image build failed." }
-          docker tag $src "127.0.0.1:5100/devsecops/vulnerable-springboot:$sha"
-          if ($LASTEXITCODE -ne 0) { throw "Image tag failed." }
+          $registry = "000000000000.dkr.ecr.us-east-1.localhost:4566"
+          $repoName = "devsecops/vulnerable-springboot"
+          $localImage = "devsecops/vulnerable-springboot:$sha"
+          $ecrImage = "${registry}/${repoName}:$sha"
+          docker build -t $localImage .
+          if ($LASTEXITCODE -ne 0) { throw "Image build failed." }
+          docker tag $localImage $ecrImage
+          if ($LASTEXITCODE -ne 0) { throw "ECR image tagging failed." }
 
-      - name: Push image to Floci registry
+      - name: Push image to Floci ECR
         shell: powershell
         run: |
+          $env:AWS_ACCESS_KEY_ID = "test"
+          $env:AWS_SECRET_ACCESS_KEY = "test"
+          $env:AWS_DEFAULT_REGION = "us-east-1"
+          $env:AWS_EC2_METADATA_DISABLED = "true"
+          $endpoint = "http://127.0.0.1:4566"
+          $region = "us-east-1"
+          $registry = "000000000000.dkr.ecr.us-east-1.localhost:4566"
+          $repoName = "devsecops/vulnerable-springboot"
           $sha = "${{ github.sha }}"
-          $src = "mwnewtrash/dockerhub_test_githubactions_springboot:$sha"
-          $dst = "127.0.0.1:5100/devsecops/vulnerable-springboot:$sha"
-          docker pull $src
-          if ($LASTEXITCODE -ne 0) { throw "Image pull failed." }
-          docker tag $src $dst
-          if ($LASTEXITCODE -ne 0) { throw "Image tag failed." }
-          docker push $dst
-          if ($LASTEXITCODE -ne 0) { throw "Registry push failed." }
+          $ecrImage = "${registry}/${repoName}:$sha"
 
+          aws ecr describe-repositories --repository-names $repoName --endpoint-url $endpoint --region $region *> $null
+          if ($LASTEXITCODE -ne 0) {
+            aws ecr create-repository --repository-name $repoName --endpoint-url $endpoint --region $region
+            if ($LASTEXITCODE -ne 0) { throw "ECR repository creation failed." }
+          }
+
+          $password = aws ecr get-login-password --endpoint-url $endpoint --region $region
+          if ($LASTEXITCODE -ne 0 -or !$password) { throw "ECR authentication token retrieval failed." }
+          $password | docker login --username AWS --password-stdin $registry
+          if ($LASTEXITCODE -ne 0) { throw "Docker login to Floci ECR failed." }
+
+          docker push $ecrImage
+          if ($LASTEXITCODE -ne 0) { throw "Push to Floci ECR failed." }
       - name: Deploy to Floci EKS
         shell: powershell
         run: |
@@ -609,13 +626,32 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "Could not attach $name to $network." }
             }
           }
+          # Ensure Floci ECR network before deployment.
+          $network = "floci_default"
+          $containers = @("floci-aws-eks-devsecops-eks-lab", "floci-ui-floci-1")
+          $networks = docker network ls --format "{{.Name}}"
+          if ($LASTEXITCODE -ne 0) { throw "Could not list Docker networks." }
+          if ($networks -notcontains $network) {
+            docker network create $network | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not create Floci network." }
+          }
+          foreach ($name in $containers) {
+            $raw = docker inspect $name 2>$null
+            if ($LASTEXITCODE -ne 0 -or !$raw) { throw "Required container not found: $name" }
+            $item = @($raw | ConvertFrom-Json)[0]
+            if ($item.State.Status -ne "running") { throw "Required container is not running: $name" }
+            if (@($item.NetworkSettings.Networks.PSObject.Properties.Name) -notcontains $network) {
+              docker network connect $network $name
+              if ($LASTEXITCODE -ne 0) { throw "Could not connect $name to $network." }
+            }
+          }
           $k = Join-Path $env:TEMP "floci-eks-lab.yaml"
           if (!(Test-Path $k)) { throw "Kubeconfig not found: $k" }
           kubectl --kubeconfig $k get nodes
           if ($LASTEXITCODE -ne 0) { throw "Cluster access failed." }
 
           $sha = "${{ github.sha }}"
-          $img = "floci-ecr-registry:5000/devsecops/vulnerable-springboot:$sha"
+          $img = "000000000000.dkr.ecr.us-east-1.localhost:4566/devsecops/vulnerable-springboot:$sha"
           $m = Get-Content "k8s/deployment.yaml" -Raw
           $old = "image: floci-ecr-registry:5000/devsecops/vulnerable-springboot:local"
           if (!$m.Contains($old)) { throw "Expected manifest image not found." }
