@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.vscode
+*.iml
+dependency-tree.txt
+sca-report
+t_GithubActions_Springboot
+pom.xml.pre-sca-remediation
+README.md
